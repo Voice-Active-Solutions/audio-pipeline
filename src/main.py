@@ -23,9 +23,11 @@ def main() -> None:
     event_payload = json.loads(event_data)
     bucket = event_payload.get("bucket")
     object_key = event_payload.get("key")
+    request_id = event_payload.get("request_id")
 
     print(f"Bucket is: {bucket}")
     print(f"Object key is: {object_key}")
+    print(f"Request ID is: {request_id}")
 
 
 if __name__ == "__main__":
