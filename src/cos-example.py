@@ -10,6 +10,7 @@ COS_INSTANCE_CRN = "crn:v1:bluemix:public:cloud-object-storage:global:a/8186f85d
 BUCKET_NAME = "cos-audio-pipeline"
 OBJECT_KEY = "test1.wav"  # The object key in COS
 
+
 def create_cos_client():
     """Create and return an IBM COS client."""
     return ibm_boto3.client(

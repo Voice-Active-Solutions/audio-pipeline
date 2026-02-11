@@ -4,6 +4,9 @@ from dotenv import load_dotenv
 import json
 import os
 
+WATSON_ASR_API_KEY = "ZYBXe-YjIkeaOSS272kN5nbJY-QsCny7QFsXNKT3_adx"
+WATSON_ASR_URL = "https://api.eu-gb.speech-to-text.watson.cloud.ibm.com/instances/57bf3a5e-6986-4115-b0b6-127b2b66fc4a"
+
 
 def main() -> None:
     load_dotenv()
