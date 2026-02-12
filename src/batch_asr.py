@@ -54,8 +54,8 @@ class BatchASR:
             """Called when inactivity timeout occurs."""
             print('Inactivity timeout: {}'.format(error))
     
-    def recognize_audio(self, audio_file_path, content_type='audio/wav', 
-                       model='en-GB_BroadbandModel', callback=None):
+    def recognize_audio(self, audio_file_path, content_type='audio/wav',
+                        model='en-GB_BroadbandModel', callback=None):
         """
         Recognize speech from an audio file using websocket connection.
         
