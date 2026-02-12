@@ -1,15 +1,18 @@
 name: Docker Image CI
 
 on:
-  push:
-    branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+    types: [closed]
 
 jobs:
-  build:
+  if_merged:
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
+      - name: Echo PR Merged
+        run: echo "Pull request successfully merged.Branch name is ${{ github.head_ref }}"
+
       - name: Checkout Code
         uses: actions/checkout@v4
 
