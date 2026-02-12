@@ -1,12 +1,16 @@
 name: Docker Image CI
 
 on:
-  pull_request:
-    branches: [ "main" ]
+  push:
+    branches:
+        - main
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  if_merged:
-    if: github.event.pull_request.merged == true
+  build-and-push:
     runs-on: ubuntu-latest
     steps:
       - name: Echo PR Merged
@@ -24,6 +28,12 @@ jobs:
         with:
           username: ${{ vars.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract Metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
 
       - name: Build and Push Multi-Platform Image
         run: |
