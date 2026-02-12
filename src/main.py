@@ -5,9 +5,14 @@ import json
 import os
 from batch_asr import BatchASR
 from ibm_watson.websocket import RecognizeCallback
+import ibm_boto3
+from ibm_botocore.client import Config, ClientError
 
 WATSON_ASR_API_KEY = "ZYBXe-YjIkeaOSS272kN5nbJY-QsCny7QFsXNKT3_adx"
 WATSON_ASR_URL = "https://api.eu-gb.speech-to-text.watson.cloud.ibm.com/instances/57bf3a5e-6986-4115-b0b6-127b2b66fc4a"
+COS_ENDPOINT = "https://s3.eu-gb.cloud-object-storage.appdomain.cloud"
+COS_API_KEY_ID = "1wU_ZzCdnFqXCv8DdYusdrpSH0XuA_YBixMLtP6znt3r"
+COS_INSTANCE_CRN = "crn:v1:bluemix:public:cloud-object-storage:global:a/8186f85d5f36d73d0caeb990c044a71f:946fec9c-f641-4a52-9a75-ed49dfc28949::"
 
 
 class CustomASRCallback(RecognizeCallback):
@@ -28,6 +33,37 @@ class CustomASRCallback(RecognizeCallback):
     def on_inactivity_timeout(self, error):
         """Called when inactivity timeout occurs."""
         print('Inactivity timeout: {}'.format(error))
+
+
+def create_cos_client():
+    """Create and return an IBM COS client."""
+    return ibm_boto3.client(
+        service_name='s3',
+        ibm_api_key_id=COS_API_KEY_ID,
+        ibm_service_instance_id=COS_INSTANCE_CRN,
+        config=Config(signature_version='oauth'),
+        endpoint_url=COS_ENDPOINT
+    )
+
+
+def load_audio_from_cos(bucket_name, object_key, local_filename):
+    """
+    Stream an audio file from IBM COS and save it locally without loading into memory.
+    """
+    cos = create_cos_client()
+    try:
+        response = cos.get_object(Bucket=bucket_name, Key=object_key)
+        body_stream = response['Body']
+
+        # Open a local file in binary write mode
+        with open(local_filename, 'wb') as f:
+            for chunk in iter(lambda: body_stream.read(1024 * 1024), b''):  # 1 MB chunks
+                f.write(chunk)
+
+        print(f"Audio file saved as '{local_filename}'")
+
+    except ClientError as e:
+        print(f"Unable to stream file: {e}")
 
 
 def main() -> None:
@@ -51,15 +87,13 @@ def main() -> None:
     print(f"Object key is: {object_key}")
     print(f"Request ID is: {request_id}")
 
-    # TODO: write the file to local storage, then it is ready to
-    # be processed by the ASR service
-
-    audio_file = 'test.wav'
+    local_audio_file = "temp.wav"
+    load_audio_from_cos(bucket, object_key, local_audio_file)
 
     cb1 = CustomASRCallback()
     asr = BatchASR(api_key=WATSON_ASR_API_KEY, service_url=WATSON_ASR_URL,
                    callback=cb1)
-    asr.recognize_audio(audio_file)
+    asr.recognize_audio(local_audio_file)
 
 
 if __name__ == "__main__":
