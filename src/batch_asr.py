@@ -6,7 +6,7 @@ from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
 from ibm_watson.websocket import RecognizeCallback, AudioSource
 
 
-class BatchASR_IBMWatson:
+class BatchASR:
     """
     A class for batch speech-to-text processing using IBM Watson Speech to Text service.
     
@@ -16,16 +16,18 @@ class BatchASR_IBMWatson:
         speech_to_text (SpeechToTextV1): Watson Speech to Text client instance
     """
     
-    def __init__(self, api_key, service_url):
+    def __init__(self, api_key, service_url, callback=None):
         """
         Initialize the BatchASR object with API credentials.
         
         Args:
             api_key (str): IBM Watson API key
             service_url (str): IBM Watson service URL
+            callback (RecognizeCallback): Optional callback handler (default: None, uses ASRCallback)
         """
         self.api_key = api_key
         self.service_url = service_url
+        self.callback = callback  # Store callback as a property
         
         # Initialize the Watson Speech to Text client
         authenticator = IAMAuthenticator(self.api_key)
@@ -60,14 +62,14 @@ class BatchASR_IBMWatson:
             audio_file_path (str): Path to the audio file
             content_type (str): MIME type of the audio file (default: 'audio/wav')
             model (str): Watson ASR model to use (default: 'en-GB_BroadbandModel')
-            callback (RecognizeCallback): Custom callback handler (default: None, uses ASRCallback)
+            callback (RecognizeCallback): Custom callback handler (default: None, uses object's callback property)
         
         Returns:
             None
         """
-        # Use custom callback if provided, otherwise use default
+        # Priority: method parameter > object property > default ASRCallback
         if callback is None:
-            callback = self.ASRCallback()
+            callback = self.callback if self.callback is not None else self.ASRCallback()
         
         with open(audio_file_path, 'rb') as audio_file:
             audio_source = AudioSource(audio_file)
@@ -85,7 +87,6 @@ if __name__ == "__main__":
     WATSON_ASR_API_KEY = "ZYBXe-YjIkeaOSS272kN5nbJY-QsCny7QFsXNKT3_adx"
     WATSON_ASR_URL = "https://api.eu-gb.speech-to-text.watson.cloud.ibm.com/instances/57bf3a5e-6986-4115-b0b6-127b2b66fc4a"
     
-    asr = BatchASR_IBMWatson(api_key=WATSON_ASR_API_KEY, service_url=WATSON_ASR_URL)
-    
-    # Recognize audio from a file
+    asr = BatchASR(api_key=WATSON_ASR_API_KEY, service_url=WATSON_ASR_URL)
+    asr.callback = BatchASR.ASRCallback()  # Set callback property
     asr.recognize_audio('test.wav')
