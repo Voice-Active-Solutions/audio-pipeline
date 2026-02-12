@@ -8,6 +8,7 @@ from ibm_watson.websocket import RecognizeCallback
 import ibm_boto3
 from ibm_botocore.client import Config, ClientError
 
+VERSION = "1.0.0"
 
 
 class CustomASRCallback(RecognizeCallback):
@@ -62,6 +63,8 @@ def load_audio_from_cos(cos, bucket_name, object_key, local_filename):
 
 
 def main() -> None:
+    print(f"Starting AudioPipeline application version {VERSION}")
+    
     load_dotenv()
 
     # read the CE_DATA environment variable, which contains
