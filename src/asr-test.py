@@ -1,18 +1,12 @@
 #!/usr/bin/env python3
 
 import json
+import os
 from ibm_watson import SpeechToTextV1
 from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
 from ibm_watson.websocket import RecognizeCallback, AudioSource
+from dotenv import load_dotenv
 
-
-WATSON_ASR_API_KEY = "ZYBXe-YjIkeaOSS272kN5nbJY-QsCny7QFsXNKT3_adx"
-WATSON_ASR_URL = "https://api.eu-gb.speech-to-text.watson.cloud.ibm.com/instances/57bf3a5e-6986-4115-b0b6-127b2b66fc4a"
-
-# initialise the Watson Speech to Text client
-authenticator = IAMAuthenticator(WATSON_ASR_API_KEY)
-speech_to_text = SpeechToTextV1(authenticator=authenticator)
-speech_to_text.set_service_url(WATSON_ASR_URL)
 
 # setup the callback function
 class ASRCallback(RecognizeCallback):
@@ -29,13 +23,28 @@ class ASRCallback(RecognizeCallback):
     def on_inactivity_timeout(self, error):
         print('Inactivity timeout: {}'.format(error))
 
-asr_cb = ASRCallback()
 
+if __name__ == "__main__":
+    load_dotenv()
 
-with open('test.wav', 'rb') as audio_file:
-    audio_source = AudioSource(audio_file)
-    speech_to_text.recognize_using_websocket(
-        audio=audio_source,
-        content_type='audio/wav',
-        recognize_callback=asr_cb,
-        model='en-GB_BroadbandModel')
+    WATSON_API_KEY = os.getenv("WATSON_ASR_API_KEY")
+    WATSON_ASR_URL = os.getenv("WATSON_ASR_URL")
+
+    if not WATSON_API_KEY or not WATSON_ASR_URL:
+        raise ValueError("Environment variables not set")
+
+    # initialise the Watson Speech to Text client
+    authenticator = IAMAuthenticator(WATSON_API_KEY)
+    speech_to_text = SpeechToTextV1(authenticator=authenticator)
+    speech_to_text.set_service_url(WATSON_ASR_URL)
+
+    asr_cb = ASRCallback()
+    local_wav_filename = '../../audio/recording.wav'
+
+    with open(local_wav_filename, 'rb') as audio_file:
+        audio_source = AudioSource(audio_file)
+        speech_to_text.recognize_using_websocket(
+            audio=audio_source,
+            content_type='audio/wav',
+            recognize_callback=asr_cb,
+            model='en-GB_BroadbandModel')

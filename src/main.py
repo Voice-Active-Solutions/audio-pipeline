@@ -8,11 +8,6 @@ from ibm_watson.websocket import RecognizeCallback
 import ibm_boto3
 from ibm_botocore.client import Config, ClientError
 
-WATSON_ASR_API_KEY = "ZYBXe-YjIkeaOSS272kN5nbJY-QsCny7QFsXNKT3_adx"
-WATSON_ASR_URL = "https://api.eu-gb.speech-to-text.watson.cloud.ibm.com/instances/57bf3a5e-6986-4115-b0b6-127b2b66fc4a"
-COS_ENDPOINT = "https://s3.eu-gb.cloud-object-storage.appdomain.cloud"
-COS_API_KEY_ID = "1wU_ZzCdnFqXCv8DdYusdrpSH0XuA_YBixMLtP6znt3r"
-COS_INSTANCE_CRN = "crn:v1:bluemix:public:cloud-object-storage:global:a/8186f85d5f36d73d0caeb990c044a71f:946fec9c-f641-4a52-9a75-ed49dfc28949::"
 
 
 class CustomASRCallback(RecognizeCallback):

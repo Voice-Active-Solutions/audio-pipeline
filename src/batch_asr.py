@@ -4,7 +4,8 @@ import json
 from ibm_watson import SpeechToTextV1
 from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
 from ibm_watson.websocket import RecognizeCallback, AudioSource
-
+from dotenv import load_dotenv
+import os
 
 class BatchASR:
     """
@@ -83,10 +84,17 @@ class BatchASR:
 
 # Example usage
 if __name__ == "__main__":
-    # Initialize the BatchASR object with your credentials
-    WATSON_ASR_API_KEY = "ZYBXe-YjIkeaOSS272kN5nbJY-QsCny7QFsXNKT3_adx"
-    WATSON_ASR_URL = "https://api.eu-gb.speech-to-text.watson.cloud.ibm.com/instances/57bf3a5e-6986-4115-b0b6-127b2b66fc4a"
+    load_dotenv()
+
+    WATSON_API_KEY = os.getenv("WATSON_ASR_API_KEY")
+    WATSON_ASR_URL = os.getenv("WATSON_ASR_URL")
+
+    if not WATSON_API_KEY or not WATSON_ASR_URL:
+        raise ValueError("Environment variables not set")
     
-    asr = BatchASR(api_key=WATSON_ASR_API_KEY, service_url=WATSON_ASR_URL)
+    local_wav_filename = '../../audio/recording.wav'    
+
+    # Initialize the BatchASR object with your credentials
+    asr = BatchASR(api_key=WATSON_API_KEY, service_url=WATSON_ASR_URL)
     asr.callback = BatchASR.ASRCallback()  # Set callback property
-    asr.recognize_audio('test.wav')
+    asr.recognize_audio(local_wav_filename)

@@ -2,31 +2,27 @@
 
 import ibm_boto3
 from ibm_botocore.client import Config, ClientError
-
-# IBM COS credentials and configuration
-COS_ENDPOINT = "https://s3.eu-gb.cloud-object-storage.appdomain.cloud"
-COS_API_KEY_ID = "1wU_ZzCdnFqXCv8DdYusdrpSH0XuA_YBixMLtP6znt3r"
-COS_INSTANCE_CRN = "crn:v1:bluemix:public:cloud-object-storage:global:a/8186f85d5f36d73d0caeb990c044a71f:946fec9c-f641-4a52-9a75-ed49dfc28949::"
-BUCKET_NAME = "cos-audio-pipeline"
-OBJECT_KEY = "test1.wav"  # The object key in COS
+from dotenv import load_dotenv
+import os
 
 
-def create_cos_client():
+def create_cos_client(cos_api_key_id, cos_instance_crn, cos_endpoint):
     """Create and return an IBM COS client."""
     return ibm_boto3.client(
         service_name='s3',
-        ibm_api_key_id=COS_API_KEY_ID,
-        ibm_service_instance_id=COS_INSTANCE_CRN,
+        ibm_api_key_id=cos_api_key_id,
+        ibm_service_instance_id=cos_instance_crn,
         config=Config(signature_version='oauth'),
-        endpoint_url=COS_ENDPOINT
+        endpoint_url=cos_endpoint
     )
 
 
-def stream_audio_from_cos(bucket_name, object_key, local_filename):
+def stream_audio_from_cos(cos, bucket_name, object_key, local_filename):
     """
-    Stream an audio file from IBM COS and save it locally without loading into memory.
+    Stream an audio file from IBM COS and save it
+    locally. This method reads the file in chunks to avoid
+    loading the entire file into memory.
     """
-    cos = create_cos_client()
     try:
         response = cos.get_object(Bucket=bucket_name, Key=object_key)
         body_stream = response['Body']
@@ -43,5 +39,22 @@ def stream_audio_from_cos(bucket_name, object_key, local_filename):
 
 
 if __name__ == "__main__":
+    load_dotenv()
+
+    COS_ENDPOINT = os.getenv("COS_ENDPOINT")
+    COS_API_KEY_ID = os.getenv("COS_API_KEY_ID")
+    COS_INSTANCE_CRN = os.getenv("COS_INSTANCE_CRN")
+
+    if not COS_API_KEY_ID or not COS_ENDPOINT or not COS_INSTANCE_CRN:
+        raise ValueError("Environment variables not set")
+
+    cos_client = create_cos_client(COS_API_KEY_ID,
+                                   COS_INSTANCE_CRN,
+                                   COS_ENDPOINT)
+
+    bucket_name = "cos-audio-pipeline"
+    audio_test_file = "test1.wav"  # The object key in the COS bucket
+
     # Save streamed audio locally
-    stream_audio_from_cos(BUCKET_NAME, OBJECT_KEY, "test.wav")
+    stream_audio_from_cos(cos_client, bucket_name, 
+                          audio_test_file, "downloaded-test.wav")
