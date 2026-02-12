@@ -1,1 +1,3 @@
 python-dotenv
+ibm-cos-sdk
+ibm-watson
