@@ -19,8 +19,8 @@ log_dir = "logs"
 os.makedirs(log_dir, exist_ok=True)
 
 # Configure root logger
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger = logging.getLogger(__name__)
+logger.setLevel(os.getenv('LOG_LEVEL', 'INFO'))
 
 # Console handler (stdout) — visible via `docker logs`
 console_handler = logging.StreamHandler(sys.stdout)
@@ -55,7 +55,7 @@ class CustomASRCallback(RecognizeCallback):
     def on_error(self, error):
         """Called when an error occurs."""
         logger.error('Error received: {}'.format(error))
-        
+
     def on_inactivity_timeout(self, error):
         """Called when inactivity timeout occurs."""
         logger.warning('Inactivity timeout: {}'.format(error))
