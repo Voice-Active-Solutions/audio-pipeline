@@ -70,7 +70,7 @@ class CustomASRCallback(RecognizeCallback):
     
     def on_data(self, data):
         """Called when recognition data is received."""
-        self.logger.info("ASR batch job completed: %s", json.dumps(data))
+        self.logger.info("ASR batch job completed: %s", json.dumps(data, indent=2))
         self.end_event.set()
     
     def on_error(self, error):
