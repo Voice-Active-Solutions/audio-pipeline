@@ -75,7 +75,7 @@ class CustomASRCallback(RecognizeCallback):
     
     def on_error(self, error):
         """Called when an error occurs."""
-        self.logger.error('Error received: {}'.format(error))
+        self.logger.error('Error received: %s', error)
         self.end_event.set()
 
     def on_inactivity_timeout(self, error):
