@@ -80,7 +80,7 @@ class CustomASRCallback(RecognizeCallback):
 
     def on_inactivity_timeout(self, error):
         """Called when inactivity timeout occurs."""
-        self.logger.warning('ASR batch job timed out: %s', format(error))
+        self.logger.warning('ASR batch job timed out: %s', error)
         self.end_event.set()
 
 
