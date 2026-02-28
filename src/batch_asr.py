@@ -2,6 +2,7 @@
 
 import json
 from ibm_watson import SpeechToTextV1
+from ibm_watson import ApiException
 from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
 from ibm_watson.websocket import RecognizeCallback, AudioSource
 from dotenv import load_dotenv
@@ -92,9 +93,12 @@ if __name__ == "__main__":
     if not WATSON_API_KEY or not WATSON_ASR_URL:
         raise ValueError("Environment variables not set")
     
-    local_wav_filename = '../../audio/recording.wav'    
+    local_wav_filename = '../audio/recording.wav'
 
     # Initialize the BatchASR object with your credentials
-    asr = BatchASR(api_key=WATSON_API_KEY, service_url=WATSON_ASR_URL)
-    asr.callback = BatchASR.ASRCallback()  # Set callback property
-    asr.recognize_audio(local_wav_filename)
+    try:
+        asr = BatchASR(api_key=WATSON_API_KEY, service_url=WATSON_ASR_URL)
+        asr.callback = BatchASR.ASRCallback()  # Set callback property
+        asr.recognize_audio(local_wav_filename)
+    except ApiException as ex:
+        print("Method failed with status code " + str(ex.code) + ": " + ex.message)
