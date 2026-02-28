@@ -6,15 +6,17 @@ import json
 import os
 from batch_asr import BatchASR
 from ibm_watson.websocket import RecognizeCallback
+from ibm_watson import ApiException
 import ibm_boto3
 from ibm_botocore.client import Config, ClientError
 import logging
 import sys
 from logging.handlers import RotatingFileHandler
 import threading
+import re
 
 
-VERSION = "1.0.2"
+VERSIONFILE = "_version.py"
 
 
 def setup_logging():
@@ -103,12 +105,26 @@ def load_audio_from_cos(cos, bucket_name, object_key, local_filename, logger) ->
         return False
 
 
+def read_app_version(versionfile: str) -> str:
+    local_path = os.path.join(os.path.dirname(__file__), versionfile)
+    verstrline = open(local_path, "rt", encoding="utf-8").read()
+    VSRE = r"^__version__ = ['\"]([^'\"]*)['\"]"
+    mo = re.search(VSRE, verstrline, re.M)
+    if mo:
+        verstr = mo.group(1)
+    else:
+        raise RuntimeError("No version string in %s", versionfile)
+    
+    return verstr
+
+
 ################# MAIN APPLICATION LOGIC ###############
 def main() -> None:
     load_dotenv()
 
+    app_version = read_app_version(VERSIONFILE)
     logger = setup_logging()
-    logger.info("Starting AudioPipeline application version %s", VERSION)
+    logger.info("Starting AudioPipeline application version %s", app_version)
 
     # read the CE_DATA environment variable, which contains
     # the event data from the COS trigger
@@ -162,7 +178,12 @@ def main() -> None:
             # Wait for ASR to complete before exiting
             cb.end_event.wait()
         else:
-            logger.error("Failed to load audio file from COS. Terminating ASR processing.")
+            logger.error("Failed to load audio file from COS.")
+    except ApiException as e:
+        logger.error("IBM Speech to Text error with code %d: %s",
+                     e.code, e.message)
+        if e.code == 400:
+            logger.error("Check value of WATSON_ASR_API_KEY")
     finally:
         if local_audio_file and os.path.exists(local_audio_file):
             os.remove(local_audio_file)
