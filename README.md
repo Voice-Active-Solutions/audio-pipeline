@@ -23,3 +23,10 @@ python src/main.py
 ## Build the container
 
 You need to make sure that you use a multiarch builder, as IBM CodeEngine will complain unless your image uses `linux/amd64` as the architecture. The easiest way to get around this is to your the `docker buildx build` command. A script `build-image.sh` can be used for this purpose. It pushes the resulting `jamespeechly/audiopipeline` image to the Docker repository. From here it can be used by Code Engine.
+
+To version the images you can apply release tags as follows:
+
+```bash
+docker image tag jamespeechly/audiopipeline:latest jamespeechly/audiopipeline:1.1.3
+docker push -a jamespeechly/audiopipeline
+```

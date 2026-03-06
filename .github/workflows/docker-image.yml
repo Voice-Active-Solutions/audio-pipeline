@@ -3,7 +3,9 @@ name: Docker Image CI
 on:
   push:
     branches:
-        - main
+      - main
+    tags:
+      - v*
 
 env:
   REGISTRY: docker.io
@@ -35,9 +37,10 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
 
-      - name: Build and Push Multi-Platform Image
-        run: |
-          docker buildx build \
-            --platform linux/amd64,linux/arm64 \
-            --tag jamespeechly/audiopipeline:latest \
-            --push .
+      - name: Build and Push
+        uses: docker/build-push-action@v6
+        with:
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
