@@ -23,6 +23,8 @@ ERROR_COS = 1
 ERROR_ASR = 2
 ERROR_EVENT_DATA = 3
 
+CHUNK_SIZE = 1024 * 1024    # 1 MB chunk size for streaming audio from COS
+
 
 def setup_logging():
     """Set up logging configuration."""
@@ -99,7 +101,8 @@ class CustomASRCallback(RecognizeCallback):
         self.end_event.set()
 
 
-def load_audio_from_cos(cos, bucket_name, object_key, local_filename, logger) -> bool:
+def load_audio_from_cos(cos, bucket_name, object_key, object_length,
+                        local_filename, logger) -> bool:
     """
     Stream an audio file from IBM COS and save it locally 
     without loading it entirely into memory.
@@ -108,11 +111,21 @@ def load_audio_from_cos(cos, bucket_name, object_key, local_filename, logger) ->
         response = cos.get_object(Bucket=bucket_name, Key=object_key)
         body_stream = response['Body']
 
+        total_bytes = 0
         # Open a local file in binary write mode
         with open(local_filename, 'wb') as f:
-            for chunk in iter(lambda: body_stream.read(1024 * 1024), b''):  # 1 MB chunks
-                f.write(chunk)
-        return True
+            for chunk in iter(lambda: body_stream.read(CHUNK_SIZE), b''):  # 1 MB chunks
+                total_bytes += f.write(chunk)
+
+        if total_bytes == object_length:
+            logger.info("Successfully loaded audio from COS: %d bytes",
+                        total_bytes)
+            return True
+        else:
+            logger.error("Mismatch in expected and actual bytes read from COS: "
+                         "expected %d, got %d", object_length, total_bytes)
+            return False
+        
     except ClientError as e:
         logger.error("Failed to load audio from COS: %s", e)
         return False
@@ -174,15 +187,28 @@ def main() -> int:
     object_key = event_payload.get("key")
     notification_object = event_payload.get("notification")
     request_id = notification_object.get("request_id")
+    request_time = notification_object.get("request_time")
+    content_type = notification_object.get("content_type")
+    object_length = int(notification_object.get("object_length"))
+
+    if content_type != "audio/wav":
+        logger.warning("Unsupported content type: %s. Only audio/wav is supported.",
+                       content_type)
+        return ERROR_COS
+
+    if object_length == 0:
+        logger.warning("Audio file is empty.")
+        return ERROR_COS
 
     logger.info("Processing request_id: %s", request_id)
+    logger.info("Processing request_time: %s", request_time)
     logger.info("File %s being read from from bucket: %s", object_key, bucket)
 
     local_audio_file = None
     try:
         _fd, local_audio_file = tempfile.mkstemp(suffix=".wav")
         os.close(_fd)
-        if load_audio_from_cos(cos_client, bucket, object_key, 
+        if load_audio_from_cos(cos_client, bucket, object_key, object_length,
                                local_audio_file, logger):
             cb = CustomASRCallback(logger)
             asr = BatchASR(api_key=WATSON_API_KEY,
