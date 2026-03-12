@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 
 import json
-from ibm_watson import SpeechToTextV1
-from ibm_watson import ApiException
-from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
-from ibm_watson.websocket import RecognizeCallback, AudioSource
-from dotenv import load_dotenv
 import os
+
+from dotenv import load_dotenv
+from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
+from ibm_watson import ApiException, SpeechToTextV1
+from ibm_watson.websocket import AudioSource, RecognizeCallback
+
 
 class BatchASR:
     """
@@ -65,14 +66,12 @@ class BatchASR:
             content_type (str): MIME type of the audio file (default: 'audio/wav')
             model (str): Watson ASR model to use (default: 'en-GB_BroadbandModel')
             callback (RecognizeCallback): Custom callback handler (default: None, uses object's callback property)
-        
         Returns:
             None
         """
         # Priority: method parameter > object property > default ASRCallback
         if callback is None:
             callback = self.callback if self.callback is not None else self.ASRCallback()
-        
         with open(audio_file_path, 'rb') as audio_file:
             audio_source = AudioSource(audio_file)
             self.speech_to_text.recognize_using_websocket(
@@ -92,7 +91,6 @@ if __name__ == "__main__":
 
     if not WATSON_API_KEY or not WATSON_ASR_URL:
         raise ValueError("Environment variables not set")
-    
     local_wav_filename = '../audio/recording.wav'
 
     # Initialize the BatchASR object with your credentials

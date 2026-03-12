@@ -59,7 +59,7 @@ def setup_logging():
 
 
 def redact_key(s: str, start_count: int = 5, end_count: int = 5) -> str:
-    """Useful function for redacting sensitive keys in logs, 
+    """Useful function for redacting sensitive keys in logs,
     showing only the first and last few characters."""
     if len(s) <= start_count + end_count:
         return s
@@ -87,7 +87,8 @@ class CustomASRCallback(RecognizeCallback):
 
     def on_data(self, data):
         """Called when recognition data is received."""
-        self.logger.info("ASR batch job completed: %s", json.dumps(data, indent=2))
+        self.logger.info("ASR batch job completed: %s",
+                         json.dumps(data, indent=2))
         self.end_event.set()
 
     def on_error(self, error):
@@ -104,7 +105,7 @@ class CustomASRCallback(RecognizeCallback):
 def load_audio_from_cos(cos, bucket_name, object_key, object_length,
                         local_filename, logger) -> bool:
     """
-    Stream an audio file from IBM COS and save it locally 
+    Stream an audio file from IBM COS and save it locally
     without loading it entirely into memory.
     """
     try:
@@ -121,11 +122,10 @@ def load_audio_from_cos(cos, bucket_name, object_key, object_length,
             logger.info("Successfully loaded audio from COS: %d bytes",
                         total_bytes)
             return True
-        else:
-            logger.error("Mismatch in expected and actual bytes read from COS: "
-                         "expected %d, got %d", object_length, total_bytes)
-            return False
-        
+
+        logger.error("Mismatch in expected and actual bytes read from COS: "
+                     "expected %d, got %d", object_length, total_bytes)
+        return False
     except ClientError as e:
         logger.error("Failed to load audio from COS: %s", e)
         return False
@@ -141,11 +141,10 @@ def read_app_version(versionfile: str) -> str:
         verstr = mo.group(1)
     else:
         raise RuntimeError("No version string in %s" % versionfile)
-    
     return verstr
 
 
-################# MAIN APPLICATION LOGIC ###############
+# MAIN APPLICATION LOGIC ###############
 def main() -> int:
     load_dotenv()
 
@@ -169,7 +168,6 @@ def main() -> int:
     cos_client = create_cos_client(COS_API_KEY_ID,
                                    COS_INSTANCE_CRN,
                                    COS_ENDPOINT)
-    
     WATSON_API_KEY = os.getenv("WATSON_ASR_API_KEY")
     WATSON_ASR_URL = os.getenv("WATSON_ASR_URL")
     if not WATSON_API_KEY or not WATSON_ASR_URL:
@@ -180,7 +178,6 @@ def main() -> int:
     if event_data is None:
         logger.warning("No event data found in CE_DATA environment variable.")
         return ERROR_EVENT_DATA
-  
     logger.debug("Received event data: %s", event_data)
     event_payload = json.loads(event_data)
     bucket = event_payload.get("bucket")
@@ -211,10 +208,8 @@ def main() -> int:
         if load_audio_from_cos(cos_client, bucket, object_key, object_length,
                                local_audio_file, logger):
             cb = CustomASRCallback(logger)
-            asr = BatchASR(api_key=WATSON_API_KEY,
-                           service_url=WATSON_ASR_URL,
+            asr = BatchASR(api_key=WATSON_API_KEY, service_url=WATSON_ASR_URL,
                            callback=cb)
-            
             asr.recognize_audio(local_audio_file)
             # Wait for ASR to complete before exiting
             cb.end_event.wait()

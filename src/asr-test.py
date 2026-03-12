@@ -2,10 +2,11 @@
 
 import json
 import os
-from ibm_watson import SpeechToTextV1
-from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
-from ibm_watson.websocket import RecognizeCallback, AudioSource
+
 from dotenv import load_dotenv
+from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
+from ibm_watson import SpeechToTextV1
+from ibm_watson.websocket import AudioSource, RecognizeCallback
 
 
 # setup the callback function
