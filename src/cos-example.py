@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 
-import ibm_boto3
-from ibm_botocore.client import Config, ClientError
-from dotenv import load_dotenv
 import os
+
+import ibm_boto3
+from dotenv import load_dotenv
+from ibm_botocore.client import ClientError, Config
+
+CHUNK_SIZE = 1024 * 1024    # 1 MB chunk size for streaming audio from COS
 
 
 def create_cos_client(cos_api_key_id, cos_instance_crn, cos_endpoint):
@@ -29,7 +32,7 @@ def stream_audio_from_cos(cos, bucket_name, object_key, local_filename):
 
         # Open a local file in binary write mode
         with open(local_filename, 'wb') as f:
-            for chunk in iter(lambda: body_stream.read(1024 * 1024), b''):  # 1 MB chunks
+            for chunk in iter(lambda: body_stream.read(CHUNK_SIZE), b''):
                 f.write(chunk)
 
         print(f"Audio file streamed and saved as '{local_filename}'")
