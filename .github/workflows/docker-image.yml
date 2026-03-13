@@ -10,6 +10,7 @@ on:
 env:
   REGISTRY: docker.io
   IMAGE_NAME: jamespeechly/audio-pipeline
+  DO_PUSH: ${{ github.ref == 'refs/heads/main' || github.event_name == 'release' }}
 
 jobs:
   build-and-push:
@@ -36,11 +37,14 @@ jobs:
         uses: docker/metadata-action@v4
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: type=semver,pattern={{version}},value=v1.0.5
 
       - name: Build and Push
+        if: env.DO_PUSH == 'true'
+        id: build-and-push
         uses: docker/build-push-action@v6
         with:
           push: true
           platforms: linux/amd64,linux/arm64
-          tags: type=semver,pattern={{version}},value=v1.0.5
+          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
