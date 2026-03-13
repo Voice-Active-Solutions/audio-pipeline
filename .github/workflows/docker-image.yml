@@ -19,6 +19,9 @@ jobs:
       - name: Echo PR Merged
         run: echo "Pull request successfully merged.Branch name is ${{ github.head_ref }}"
 
+      - name: Echo Docker Build Flag
+        run: echo "Docker build flag is ${{ env.DO_PUSH }}"
+
       - name: Checkout Code
         uses: actions/checkout@v4
 
@@ -39,6 +42,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: type=semver,pattern={{version}},value=v1.0.5
 
+<<<<<<< HEAD
       - name: Build and Push
         if: env.DO_PUSH == 'true'
         id: build-and-push
@@ -48,3 +52,5 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: latest
           labels: ${{ steps.meta.outputs.labels }}
+=======
+>>>>>>> f0243ec (Remove docker build step from GitHub action)
