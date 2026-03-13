@@ -2,10 +2,10 @@ name: Docker Image CI
 
 on:
   push:
+    tags:
+      - v*    
     branches:
       - main
-    tags:
-      - v*
 
 env:
   REGISTRY: docker.io
@@ -42,5 +42,5 @@ jobs:
         with:
           push: true
           platforms: linux/amd64,linux/arm64
-          tags: latest
+          tags: type=semver,pattern={{version}},value=v1.0.5
           labels: ${{ steps.meta.outputs.labels }}
