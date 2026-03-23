@@ -1,12 +1,38 @@
 #!/usr/bin/env python3
 
+from asyncio.log import logger
 import json
 import os
+import threading
 
 from dotenv import load_dotenv
 from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
 from ibm_watson import ApiException, SpeechToTextV1
 from ibm_watson.websocket import AudioSource, RecognizeCallback
+
+
+class DefaultASRCallback(RecognizeCallback):
+    """Callback handler for ASR recognition events."""
+
+    def __init__(self):
+        RecognizeCallback.__init__(self)
+        self.end_event = threading.Event()
+
+    def on_data(self, data):
+        """Called when recognition data is received."""
+        print("Customised ASR batch job completed: %s",
+                         json.dumps(data, indent=2))
+        self.end_event.set()
+
+    def on_error(self, error):
+        """Called when an error occurs."""
+        print('Error received: %s', error)
+        self.end_event.set()
+
+    def on_inactivity_timeout(self, error):
+        """Called when inactivity timeout occurs."""
+        print('ASR batch job timed out: %s', error)
+        self.end_event.set()
 
 
 class BatchASR:
@@ -16,9 +42,10 @@ class BatchASR:
     Attributes:
         api_key (str): IBM Watson API key for authentication
         service_url (str): IBM Watson service URL endpoint
-        speech_to_text (SpeechToTextV1): Watson Speech to Text client instance
+        callback (RecognizeCallback): Callback handler for ASR events
     """
     
+
     def __init__(self, api_key, service_url, callback=None):
         """
         Initialize the BatchASR object with API credentials.
@@ -30,34 +57,16 @@ class BatchASR:
         """
         self.api_key = api_key
         self.service_url = service_url
-        self.callback = callback  # Store callback as a property
+        self._callback = callback
         
         # Initialize the Watson Speech to Text client
         authenticator = IAMAuthenticator(self.api_key)
         self.speech_to_text = SpeechToTextV1(authenticator=authenticator)
         self.speech_to_text.set_service_url(self.service_url)
     
-    class ASRCallback(RecognizeCallback):
-        """Callback handler for ASR recognition events."""
-        
-        def __init__(self):
-            RecognizeCallback.__init__(self)
-        
-        def on_data(self, data):
-            """Called when recognition data is received."""
-            print("ASR job has completed!")
-            print(json.dumps(data, indent=2))
-        
-        def on_error(self, error):
-            """Called when an error occurs."""
-            print('Error received: {}'.format(error))
-        
-        def on_inactivity_timeout(self, error):
-            """Called when inactivity timeout occurs."""
-            print('Inactivity timeout: {}'.format(error))
     
     def recognize_audio(self, audio_file_path, content_type='audio/wav',
-                        model='en-GB_BroadbandModel', callback=None):
+                        model='en-GB_BroadbandModel'):
         """
         Recognize speech from an audio file using websocket connection.
         
@@ -65,21 +74,32 @@ class BatchASR:
             audio_file_path (str): Path to the audio file
             content_type (str): MIME type of the audio file (default: 'audio/wav')
             model (str): Watson ASR model to use (default: 'en-GB_BroadbandModel')
-            callback (RecognizeCallback): Custom callback handler (default: None, uses object's callback property)
         Returns:
             None
         """
         # Priority: method parameter > object property > default ASRCallback
-        if callback is None:
-            callback = self.callback if self.callback is not None else self.ASRCallback()
+        if self._callback is None:
+            raise ValueError("Callback is not initialized")
+
         with open(audio_file_path, 'rb') as audio_file:
             audio_source = AudioSource(audio_file)
             self.speech_to_text.recognize_using_websocket(
                 audio=audio_source,
                 content_type=content_type,
-                recognize_callback=callback,
+                recognize_callback=self._callback,
                 model=model
             )
+
+
+    @property
+    def callback(self):
+        print("getter method called")
+        return self._callback
+
+    @callback.setter
+    def callback(self, cb):
+        print("setter method called")
+        self._callback = cb
 
 
 # Example usage
@@ -91,12 +111,16 @@ if __name__ == "__main__":
 
     if not WATSON_API_KEY or not WATSON_ASR_URL:
         raise ValueError("Environment variables not set")
-    local_wav_filename = '../audio/recording.wav'
+    local_wav_filename = '../audio/test1.wav'
+
+    cb = DefaultASRCallback()
 
     # Initialize the BatchASR object with your credentials
     try:
-        asr = BatchASR(api_key=WATSON_API_KEY, service_url=WATSON_ASR_URL)
-        asr.callback = BatchASR.ASRCallback()  # Set callback property
+        asr = BatchASR(WATSON_API_KEY, WATSON_ASR_URL, cb)
         asr.recognize_audio(local_wav_filename)
+        cb.end_event.wait()
+    except ValueError as ve:
+        print("Initialization error: " + str(ve))
     except ApiException as ex:
-        print("Method failed with status code " + str(ex.code) + ": " + ex.message)
+        print(f"Method failed with status code {ex.code}: {ex.message}")

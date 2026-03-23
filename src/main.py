@@ -87,7 +87,7 @@ class CustomASRCallback(RecognizeCallback):
 
     def on_data(self, data):
         """Called when recognition data is received."""
-        self.logger.info("ASR batch job completed: %s",
+        self.logger.info("Customised ASR batch job completed: %s",
                          json.dumps(data, indent=2))
         self.end_event.set()
 
@@ -207,9 +207,9 @@ def main() -> int:
         os.close(_fd)
         if load_audio_from_cos(cos_client, bucket, object_key, object_length,
                                local_audio_file, logger):
+            asr = BatchASR(WATSON_API_KEY, WATSON_ASR_URL)
             cb = CustomASRCallback(logger)
-            asr = BatchASR(api_key=WATSON_API_KEY, service_url=WATSON_ASR_URL,
-                           callback=cb)
+            asr.callback = cb
             asr.recognize_audio(local_audio_file)
             # Wait for ASR to complete before exiting
             cb.end_event.wait()
