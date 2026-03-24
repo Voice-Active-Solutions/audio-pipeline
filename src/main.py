@@ -6,14 +6,12 @@ import os
 import re
 import sys
 import tempfile
-import threading
 from logging.handlers import RotatingFileHandler
 
 import ibm_boto3
 from dotenv import load_dotenv
 from ibm_botocore.client import ClientError, Config
 from ibm_watson import ApiException
-from ibm_watson.websocket import RecognizeCallback
 
 from batch_asr import BatchASR
 
@@ -27,7 +25,21 @@ CHUNK_SIZE = 1024 * 1024    # 1 MB chunk size for streaming audio from COS
 
 
 def setup_logging():
-    """Set up logging configuration."""
+    """Set up logging configuration.
+
+    Creates a logs directory if one does not already exist, then configures
+    the root logger with two handlers:
+      - A console (stdout) handler for visibility via `docker logs`.
+      - A rotating file handler that persists logs to a mounted volume,
+        capped at 5 MB per file with up to 3 backup files retained.
+
+    The log directory and log level are controlled by the ``LOG_DIR`` and
+    ``LOG_LEVEL`` environment variables, defaulting to ``"logs"`` and
+    ``"INFO"`` respectively.
+
+    Returns:
+        logging.Logger: The configured root logger instance.
+    """
 
     # Create logs directory if it doesn't exist
     log_dir = os.getenv("LOG_DIR", "logs")
@@ -59,15 +71,42 @@ def setup_logging():
 
 
 def redact_key(s: str, start_count: int = 5, end_count: int = 5) -> str:
-    """Useful function for redacting sensitive keys in logs,
-    showing only the first and last few characters."""
+    """Redact a sensitive key or token for safe inclusion in log output.
+
+    Preserves the first ``start_count`` and last ``end_count`` characters of
+    the string and replaces everything in between with ``"..."``, giving just
+    enough context to identify a key without exposing its full value.
+
+    If the string is shorter than or equal to ``start_count + end_count``
+    characters it is returned unchanged.
+
+    Args:
+        s: The sensitive string to redact.
+        start_count: Number of leading characters to preserve. Defaults to 5.
+        end_count: Number of trailing characters to preserve. Defaults to 5.
+
+    Returns:
+        str: The redacted string, e.g. ``"ABCDE...VWXYZ"``.
+    """
     if len(s) <= start_count + end_count:
         return s
     return s[:start_count] + "..." + s[-end_count:]
 
 
 def create_cos_client(cos_api_key_id, cos_instance_crn, cos_endpoint):
-    """Create and return an IBM COS client."""
+    """Create and return an IBM Cloud Object Storage (COS) S3 client.
+
+    Initialises an ``ibm_boto3`` S3 client using OAuth-based authentication
+    against the specified COS endpoint.
+
+    Args:
+        cos_api_key_id (str): IBM Cloud API key used to authenticate with COS.
+        cos_instance_crn (str): CRN of the COS service instance.
+        cos_endpoint (str): Full URL of the COS regional or cross-region endpoint.
+
+    Returns:
+        botocore.client.S3: A configured IBM COS S3 client ready to make requests.
+    """
     return ibm_boto3.client(
         service_name='s3',
         ibm_api_key_id=cos_api_key_id,
@@ -77,36 +116,28 @@ def create_cos_client(cos_api_key_id, cos_instance_crn, cos_endpoint):
     )
 
 
-class CustomASRCallback(RecognizeCallback):
-    """Callback handler for ASR recognition events."""
-
-    def __init__(self, logger):
-        self.logger = logger
-        RecognizeCallback.__init__(self)
-        self.end_event = threading.Event()
-
-    def on_data(self, data):
-        """Called when recognition data is received."""
-        self.logger.info("Customised ASR batch job completed: %s",
-                         json.dumps(data, indent=2))
-        self.end_event.set()
-
-    def on_error(self, error):
-        """Called when an error occurs."""
-        self.logger.error('Error received: %s', error)
-        self.end_event.set()
-
-    def on_inactivity_timeout(self, error):
-        """Called when inactivity timeout occurs."""
-        self.logger.warning('ASR batch job timed out: %s', error)
-        self.end_event.set()
-
-
 def load_audio_from_cos(cos, bucket_name, object_key, object_length,
                         local_filename, logger) -> bool:
-    """
-    Stream an audio file from IBM COS and save it locally
-    without loading it entirely into memory.
+    """Stream an audio file from IBM COS and save it to a local file.
+
+    Downloads the object in fixed-size chunks (``CHUNK_SIZE``) to avoid
+    loading the entire file into memory, then verifies that the number of
+    bytes written matches the expected ``object_length``.
+
+    Args:
+        cos: An IBM COS S3 client as returned by :func:`create_cos_client`.
+        bucket_name (str): Name of the COS bucket containing the audio file.
+        object_key (str): Key (path) of the object within the bucket.
+        object_length (int): Expected size of the object in bytes, used to
+            verify download integrity.
+        local_filename (str): Absolute path to the local file where the audio
+            data will be written.
+        logger (logging.Logger): Logger instance used to record progress and
+            error messages.
+
+    Returns:
+        bool: ``True`` if the file was downloaded successfully and the byte
+        count matches ``object_length``; ``False`` otherwise.
     """
     try:
         response = cos.get_object(Bucket=bucket_name, Key=object_key)
@@ -132,6 +163,22 @@ def load_audio_from_cos(cos, bucket_name, object_key, object_length,
 
 
 def read_app_version(versionfile: str) -> str:
+    """Read and return the application version string from a version file.
+
+    Looks for a line of the form ``__version__ = 'x.y.z'`` (single or double
+    quotes) in the specified file, which must reside in the same directory as
+    this module.
+
+    Args:
+        versionfile (str): Filename (not full path) of the version file to
+            read, e.g. ``"_version.py"``.
+
+    Returns:
+        str: The version string extracted from the file, e.g. ``"1.2.3"``.
+
+    Raises:
+        RuntimeError: If no ``__version__`` assignment is found in the file.
+    """
     local_path = os.path.join(os.path.dirname(__file__), versionfile)
     with open(local_path, "rt", encoding="utf-8") as f:
         verstrline = f.read().strip()
@@ -146,6 +193,25 @@ def read_app_version(versionfile: str) -> str:
 
 # MAIN APPLICATION LOGIC ###############
 def main() -> int:
+    """Entry point for the AudioPipeline application.
+
+    Orchestrates the end-to-end audio transcription pipeline:
+
+    1. Loads environment variables and reads the application version.
+    2. Parses the COS trigger event from the ``CE_DATA`` environment variable.
+    3. Validates required COS and Watson ASR credentials.
+    4. Downloads the audio file (WAV only) from IBM COS to a temporary file.
+    5. Submits the audio to IBM Watson Speech-to-Text via :class:`BatchASR`.
+    6. Prints the assembled transcript to stdout.
+    7. Cleans up the temporary audio file on exit.
+
+    Returns:
+        int: An exit code indicating the outcome of the run:
+            - ``0``  — success.
+            - ``ERROR_COS`` (1) — COS configuration or download failure.
+            - ``ERROR_ASR`` (2) — Watson ASR configuration or API failure.
+            - ``ERROR_EVENT_DATA`` (3) — missing or malformed event data.
+    """
     load_dotenv()
 
     app_version = read_app_version(VERSIONFILE)
@@ -168,6 +234,7 @@ def main() -> int:
     cos_client = create_cos_client(COS_API_KEY_ID,
                                    COS_INSTANCE_CRN,
                                    COS_ENDPOINT)
+
     WATSON_API_KEY = os.getenv("WATSON_ASR_API_KEY")
     WATSON_ASR_URL = os.getenv("WATSON_ASR_URL")
     if not WATSON_API_KEY or not WATSON_ASR_URL:
@@ -179,6 +246,7 @@ def main() -> int:
         logger.warning("No event data found in CE_DATA environment variable.")
         return ERROR_EVENT_DATA
     logger.debug("Received event data: %s", event_data)
+
     event_payload = json.loads(event_data)
     bucket = event_payload.get("bucket")
     object_key = event_payload.get("key")
@@ -208,11 +276,10 @@ def main() -> int:
         if load_audio_from_cos(cos_client, bucket, object_key, object_length,
                                local_audio_file, logger):
             asr = BatchASR(WATSON_API_KEY, WATSON_ASR_URL)
-            cb = CustomASRCallback(logger)
-            asr.callback = cb
-            asr.recognize_audio(local_audio_file)
-            # Wait for ASR to complete before exiting
-            cb.end_event.wait()
+            transcript_json = asr.recognize_audio(local_audio_file)
+            transcripts = [result['alternatives'][0]['transcript'] for result in transcript_json]
+            transcript = " ".join(x for x in transcripts)
+            print(transcript)
         else:
             logger.error("Failed to load audio file from COS.")
             return ERROR_COS
