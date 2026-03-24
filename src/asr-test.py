@@ -9,6 +9,29 @@ from ibm_watson import SpeechToTextV1
 from ibm_watson.websocket import AudioSource, RecognizeCallback
 
 
+def extract_transcript(data: dict) -> str:
+    """
+    Extracts plain text transcript from a JSON transcription structure.
+    
+    Args:
+        data: Dictionary containing transcription data with 'results' key
+        
+    Returns:
+        Plain text transcript as a single string
+    """
+    transcript_parts = []
+    
+    for result in data.get("results", []):
+        alternatives = result.get("alternatives", [])
+        if alternatives:
+            # Take the first (highest confidence) alternative
+            transcript = alternatives[0].get("transcript", "")
+            if transcript:
+                transcript_parts.append(transcript.strip())
+    
+    return " ".join(transcript_parts)
+
+
 # setup the callback function
 class ASRCallback(RecognizeCallback):
     def __init__(self):
@@ -17,6 +40,9 @@ class ASRCallback(RecognizeCallback):
     def on_data(self, data):
         print("ASR job has completed!")
         print(json.dumps(data, indent=2))
+        #raw_transcript = extract_transcript(data)
+        #print("====== Extracted Transcript:")
+        #print(raw_transcript)
 
     def on_error(self, error):
         print('Error received: {}'.format(error))
@@ -40,7 +66,7 @@ if __name__ == "__main__":
     speech_to_text.set_service_url(WATSON_ASR_URL)
 
     asr_cb = ASRCallback()
-    local_wav_filename = '../../audio/recording.wav'
+    local_wav_filename = '../../audio/medium-1.wav'
 
     with open(local_wav_filename, 'rb') as audio_file:
         audio_source = AudioSource(audio_file)
