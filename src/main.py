@@ -8,12 +8,11 @@ import sys
 import tempfile
 from logging.handlers import RotatingFileHandler
 
-import ibm_boto3
 from dotenv import load_dotenv
+import ibm_boto3
 from ibm_botocore.client import ClientError, Config
-from ibm_watson import ApiException
 
-from batch_asr import BatchASR
+from batch_asr import IBMWatsonASR
 
 VERSIONFILE = "_version.py"
 
@@ -150,15 +149,15 @@ def load_audio_from_cos(cos, bucket_name, object_key, object_length,
                 total_bytes += f.write(chunk)
 
         if total_bytes == object_length:
-            logger.info("Successfully loaded audio from COS: %d bytes",
-                        total_bytes)
+            logger.info("Successfully loaded audio file '%s' from bucket: %d bytes",
+                        object_key, total_bytes)
             return True
 
-        logger.error("Mismatch in expected and actual bytes read from COS: "
+        logger.error("Mismatch in expected and actual bytes read from bucket: "
                      "expected %d, got %d", object_length, total_bytes)
         return False
     except ClientError as e:
-        logger.error("Failed to load audio from COS: %s", e)
+        logger.error("Failed to load audio from bucket: %s", e)
         return False
 
 
@@ -209,7 +208,7 @@ def main() -> int:
         int: An exit code indicating the outcome of the run:
             - ``0``  — success.
             - ``ERROR_COS`` (1) — COS configuration or download failure.
-            - ``ERROR_ASR`` (2) — Watson ASR configuration or API failure.
+            - ``ERROR_ASR`` (2) — ASR configuration or API failure.
             - ``ERROR_EVENT_DATA`` (3) — missing or malformed event data.
     """
     load_dotenv()
@@ -222,24 +221,6 @@ def main() -> int:
     # the event data from the COS trigger
     event_data = os.getenv("CE_DATA")
     logger.info("Received event data")
-
-    COS_ENDPOINT = os.getenv("COS_ENDPOINT")
-    COS_API_KEY_ID = os.getenv("COS_API_KEY_ID")
-    COS_INSTANCE_CRN = os.getenv("COS_INSTANCE_CRN")
-
-    if not COS_API_KEY_ID or not COS_ENDPOINT or not COS_INSTANCE_CRN:
-        logger.error("COS environment variables not set.")
-        return ERROR_COS
-
-    cos_client = create_cos_client(COS_API_KEY_ID,
-                                   COS_INSTANCE_CRN,
-                                   COS_ENDPOINT)
-
-    WATSON_API_KEY = os.getenv("WATSON_ASR_API_KEY")
-    WATSON_ASR_URL = os.getenv("WATSON_ASR_URL")
-    if not WATSON_API_KEY or not WATSON_ASR_URL:
-        logger.error("Watson ASR environment variables not set")
-        return ERROR_ASR
 
     # extract the bucket name and object key from the event data as strings
     if event_data is None:
@@ -267,29 +248,47 @@ def main() -> int:
 
     logger.info("Processing request_id: %s", request_id)
     logger.info("Processing request_time: %s", request_time)
-    logger.info("File %s being read from from bucket: %s", object_key, bucket)
+    logger.info("Looking for '%s' in bucket '%s'", object_key, bucket)
 
     local_audio_file = None
+
+    COS_ENDPOINT = os.getenv("COS_ENDPOINT")
+    COS_API_KEY_ID = os.getenv("COS_API_KEY_ID")
+    COS_INSTANCE_CRN = os.getenv("COS_INSTANCE_CRN")
+
+    if not COS_API_KEY_ID or not COS_ENDPOINT or not COS_INSTANCE_CRN:
+        logger.error("COS environment variables not set.")
+        return ERROR_COS
+
+    cos_client = create_cos_client(COS_API_KEY_ID,
+                                   COS_INSTANCE_CRN,
+                                   COS_ENDPOINT)
+
     try:
         _fd, local_audio_file = tempfile.mkstemp(suffix=".wav")
         os.close(_fd)
         if load_audio_from_cos(cos_client, bucket, object_key, object_length,
                                local_audio_file, logger):
-            asr = BatchASR(WATSON_API_KEY, WATSON_ASR_URL)
-            transcript_json = asr.recognize_audio(local_audio_file)
-            transcripts = [result['alternatives'][0]['transcript'] for result in transcript_json]
-            transcript = " ".join(x for x in transcripts)
-            print(transcript)
+            WATSON_ASR_API_KEY = os.getenv("WATSON_ASR_API_KEY")
+            WATSON_ASR_URL = os.getenv("WATSON_ASR_URL")
+            try:
+                asr = IBMWatsonASR(WATSON_ASR_API_KEY, WATSON_ASR_URL)
+            except Exception as e:
+                logger.error("Failed to initialise ASR client: %s", e)
+                return ERROR_ASR
+
+            try:
+                # run the ASR transcription and print the result
+                transcript = asr.recognize_audio(local_audio_file)
+                print(transcript)
+            except ValueError as e:
+                logger.error("Error occurred while attempting to transcribe audio: %s", e)
+                logger.error("Check ASR API key, service URL, and audio file format.")
+                logger.error("ASR API key: %s", redact_key(WATSON_ASR_API_KEY))
+                logger.error("ASR service URL: %s", WATSON_ASR_URL)
+                return ERROR_ASR
         else:
-            logger.error("Failed to load audio file from COS.")
             return ERROR_COS
-    except ApiException as e:
-        logger.error("IBM Speech to Text error with code %d: %s",
-                     e.code, e.message)
-        if e.code == 400:
-            logger.error("Check value of WATSON_ASR_API_KEY")
-            logger.error("Current value is: %s", redact_key(WATSON_API_KEY))
-            return ERROR_ASR
     finally:
         if local_audio_file and os.path.exists(local_audio_file):
             os.remove(local_audio_file)
